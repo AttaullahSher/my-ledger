@@ -1,10 +1,12 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useMatch } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useApp } from './AppContext'
 import { QuickAdd } from './QuickAdd'
 
 export function Layout() {
   const { openAdd } = useApp()
+  // On a person's profile, new entries go to that person automatically.
+  const personId = useMatch('/people/:id')?.params.id
   return (
     <div className="min-h-dvh">
       <main className="pb-[calc(env(safe-area-inset-bottom)+110px)]">
@@ -14,7 +16,7 @@ export function Layout() {
         <button
           type="button"
           aria-label="Add entry"
-          onClick={() => openAdd()}
+          onClick={() => openAdd(personId ? { personId } : undefined)}
           className="pointer-events-auto flex h-14 items-center gap-2 rounded-full bg-brand pl-5 pr-6 text-[16px] font-semibold text-white shadow-xl shadow-slate-900/30 active:scale-95"
         >
           <Plus size={24} strokeWidth={2.5} /> Add entry
