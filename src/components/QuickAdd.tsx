@@ -146,9 +146,6 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
 
         <DatePickerRow date={date} onChange={setDate} />
 
-        <Field label="Note (optional)">
-          <textarea className={cx(inputCls, 'min-h-[52px] resize-none')} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any detail you want to remember" />
-        </Field>
       </div>
     </Sheet>
   )

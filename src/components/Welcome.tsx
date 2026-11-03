@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, LogIn, Sparkles } from 'lucide-react'
+import { syncAvailable } from '../lib/sync'
+import { SyncCard } from './SyncCard'
 import { db } from '../lib/db'
 import { saveSettings } from '../lib/repo'
 import { ACCENTS } from '../lib/types'
@@ -10,6 +12,7 @@ import { Button, Field, Sheet, cx, inputCls } from './ui'
 export function Welcome() {
   const { settings, ready } = useApp()
   const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<'choose' | 'signin' | 'brand'>(syncAvailable() ? 'choose' : 'brand')
 
   useEffect(() => {
     if (!ready || settings.onboarded) return
@@ -17,7 +20,35 @@ export function Welcome() {
     db.people.count().then((n) => (n ? saveSettings({ onboarded: true }) : setOpen(true)))
   }, [ready, settings.onboarded])
 
-  return <BrandingSheet open={open} onClose={() => { setOpen(false); saveSettings({ onboarded: true }) }} welcome />
+  const finish = () => {
+    setOpen(false)
+    saveSettings({ onboarded: true })
+  }
+  if (!open) return null
+  if (step === 'brand') return <BrandingSheet open onClose={finish} welcome />
+  return (
+    <Sheet open onClose={finish} title="Welcome 👋">
+      {step === 'choose' ? (
+        <div className="space-y-3 pb-3">
+          <p className="text-[15px] text-slate-600 dark:text-slate-300">A private ledger of money you give and receive. Only you can see your records.</p>
+          <Button className="w-full" onClick={() => setStep('signin')}>
+            <LogIn size={18} /> I already have an account
+          </Button>
+          <p className="-mt-1 text-center text-xs text-slate-500">Sign in to bring back your people, entries and branding.</p>
+          <Button variant="secondary" className="w-full" onClick={() => setStep('brand')}>
+            <Sparkles size={18} /> I’m new — set up my ledger
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3 pb-3">
+          <SyncCard onDone={finish} />
+          <button type="button" className="w-full py-2 text-center text-sm font-semibold text-blue-600 dark:text-blue-400" onClick={() => setStep('choose')}>
+            ← Back
+          </button>
+        </div>
+      )}
+    </Sheet>
+  )
 }
 
 export function BrandingSheet({ open, onClose, welcome }: { open: boolean; onClose: () => void; welcome?: boolean }) {

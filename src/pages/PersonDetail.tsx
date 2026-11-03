@@ -9,12 +9,9 @@ import {
   CheckCheck,
   ChevronDown,
   ChevronLeft,
-  Copy,
-  FileSpreadsheet,
   FileText,
   MessageCircle,
   Pencil,
-  Phone,
   Share2,
   Trash2,
 } from 'lucide-react'
@@ -26,11 +23,11 @@ import { useFileShare } from '../components/useFileShare'
 import { Avatar, Button, Chip, Empty, Field, IconButton, Sheet, cx, inputCls } from '../components/ui'
 import { db, liveTxsOf } from '../lib/db'
 import { formatDate, todayISO } from '../lib/dates'
-import { personCSV, personStatementPDF, personXLSX, statementText, type DateRange } from '../lib/exporters'
+import { personStatementPDF, statementText, type DateRange } from '../lib/exporters'
 import { balanceLabel, personTotals, splitSettled, typeLabel } from '../lib/ledger'
 import { formatMoney } from '../lib/money'
 import * as repo from '../lib/repo'
-import { copyText, whatsappLink } from '../lib/share'
+import { whatsappLink } from '../lib/share'
 import type { Transaction } from '../lib/types'
 import { Paged } from './Home'
 
@@ -132,20 +129,9 @@ export function PersonDetailPage() {
           </div>
           <div className="ml-2 min-w-0 flex-1">
             <h1 className="truncate text-2xl font-bold tracking-tight">{person.name}</h1>
-            <div className="truncate text-sm text-slate-500">{person.archivedAt ? 'Archived' : person.phone || 'No phone saved'}</div>
+            <div className="truncate text-sm text-slate-500">{person.archivedAt ? 'Archived' : `${totals.count} entr${totals.count === 1 ? 'y' : 'ies'}`}</div>
           </div>
-          {person.phone && (
-            <div className="flex gap-1">
-              <a href={`tel:${person.phone.replace(/\s/g, '')}`} aria-label="Call" className="grid h-11 w-11 place-items-center rounded-full bg-white shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900">
-                <Phone size={18} />
-              </a>
-              <a href={whatsappLink('', person.phone)} target="_blank" rel="noreferrer" aria-label="WhatsApp" className="grid h-11 w-11 place-items-center rounded-full bg-white text-green-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900">
-                <MessageCircle size={18} />
-              </a>
-            </div>
-          )}
         </div>
-        {person.notes && <p className="mt-2 text-sm text-slate-500">{person.notes}</p>}
 
         {/* Balance */}
         <div
@@ -301,16 +287,14 @@ function RangePicker({ range, onChange }: { range: DateRange; onChange: (r: Date
 function ClearBalanceSheet({ open, onClose, personId, name, balance }: { open: boolean; onClose: () => void; personId: string; name: string; balance: number }) {
   const { settings, toast } = useApp()
   const [date, setDate] = useState(todayISO())
-  const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const amount = formatMoney(Math.abs(balance), settings.currency)
 
   async function go() {
     setBusy(true)
     try {
-      await repo.clearBalance(personId, date, note)
+      await repo.clearBalance(personId, date)
       toast(`${name}: balance cleared`)
-      setNote('')
       onClose()
     } finally {
       setBusy(false)
@@ -323,16 +307,13 @@ function ClearBalanceSheet({ open, onClose, personId, name, balance }: { open: b
           {balance > 0 ? `Records that ${name} paid you ${amount}.` : `Records that you paid ${name} ${amount}.`} The balance becomes zero and older entries move into “Settled & closed”. <b>Nothing is deleted.</b>
         </p>
         <DatePickerRow date={date} onChange={setDate} />
-        <Field label="Note (optional)">
-          <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Paid in cash" />
-        </Field>
       </div>
     </Sheet>
   )
 }
 
 function ShareSheet({ open, onClose, personId }: { open: boolean; onClose: () => void; personId: string }) {
-  const { settings, toast } = useApp()
+  const { settings } = useApp()
   const [range, setRange] = useState<DateRange>({})
   const { share, busy, sheet } = useFileShare()
   const opts = { currency: settings.currency, dateFormat: settings.dateFormat, title: settings.appTitle, owner: settings.ownerName, accent: settings.accent }
@@ -344,12 +325,8 @@ function ShareSheet({ open, onClose, personId }: { open: boolean; onClose: () =>
   // Synchronous on purpose: iPhone only opens WhatsApp straight after a tap.
   function whatsapp() {
     if (!data) return
-    window.open(whatsappLink(statementText(data.person, data.txs, range, opts), data.person.phone), '_blank')
+    window.open(whatsappLink(statementText(data.person, data.txs, range, opts)), '_blank')
   }
-  async function copy() {
-    if (data && (await copyText(statementText(data.person, data.txs, range, opts)))) toast('Summary copied')
-  }
-
   const Row = ({ k, icon, title, sub, onClick }: { k: string; icon: ReactNode; title: string; sub: string; onClick: () => void }) => (
     <button type="button" disabled={!!busy || !data} onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left active:bg-slate-100 disabled:opacity-60 dark:active:bg-slate-800">
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800">{icon}</span>
@@ -372,22 +349,7 @@ function ShareSheet({ open, onClose, personId }: { open: boolean; onClose: () =>
             sub="Share sheet — WhatsApp, Mail, Save to Files…"
             onClick={() => data && share('pdf', async () => [await personStatementPDF(data.person, data.txs, range, opts)], `${data.person.name} – statement`)}
           />
-          <Row k="wa" icon={<MessageCircle size={20} className="text-green-600" />} title="WhatsApp text summary" sub="Opens WhatsApp with the summary ready — you press send" onClick={whatsapp} />
-          <Row k="copy" icon={<Copy size={20} />} title="Copy summary" sub="Paste it anywhere" onClick={copy} />
-          <Row
-            k="xlsx"
-            icon={<FileSpreadsheet size={20} className="text-emerald-700" />}
-            title="Excel (.xlsx)"
-            sub="Formatted, ready to print"
-            onClick={() => data && share('xlsx', async () => [await personXLSX(data.person, data.txs, range, opts)], data.person.name)}
-          />
-          <Row
-            k="csv"
-            icon={<FileSpreadsheet size={20} className="text-slate-500" />}
-            title="CSV"
-            sub="For any spreadsheet app"
-            onClick={() => data && share('csv', () => [personCSV(data.person, data.txs, range, opts)], data.person.name)}
-          />
+          <Row k="wa" icon={<MessageCircle size={20} className="text-green-600" />} title="WhatsApp text summary" sub="Opens WhatsApp — choose the person and press send" onClick={whatsapp} />
         </div>
       </Sheet>
       {sheet}

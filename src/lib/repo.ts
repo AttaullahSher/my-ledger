@@ -3,7 +3,7 @@ import Dexie from 'dexie'
 import { db, liveTxsOf, newId, nowISO, queue } from './db'
 import { isValidISODate } from './dates'
 import { personTotals, settlementFor } from './ledger'
-import { DEFAULT_SETTINGS, type Direction, type Person, type Settings, type Transaction } from './types'
+import { DEFAULT_SETTINGS, PROFILE_KEYS, type Direction, type Person, type Settings, type Transaction } from './types'
 
 export class ValidationError extends Error {}
 
@@ -198,9 +198,10 @@ export async function getSettings(): Promise<Settings> {
   return { ...DEFAULT_SETTINGS, ...rest }
 }
 
-export async function saveSettings(patch: Partial<Settings>) {
+export async function saveSettings(patch: Partial<Settings>, fromSync = false) {
   const current = await getSettings()
-  await db.settings.put({ ...current, ...patch, key: 'app' })
+  const profileChanged = !fromSync && PROFILE_KEYS.some((k) => k in patch && patch[k] !== current[k])
+  await db.settings.put({ ...current, ...patch, ...(profileChanged ? { profileUpdatedAt: nowISO() } : {}), key: 'app' })
 }
 
 // ---------- PIN ----------

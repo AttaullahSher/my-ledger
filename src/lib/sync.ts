@@ -4,7 +4,8 @@
 import { liveQuery } from 'dexie'
 import { firebaseConfig } from '../config/firebase'
 import { db } from './db'
-import type { Person, Transaction } from './types'
+import { PROFILE_KEYS, type Person, type Settings, type Transaction } from './types'
+import { getSettings, saveSettings } from './repo'
 
 export type SyncStatus = 'off' | 'signed-out' | 'syncing' | 'synced' | 'offline' | 'error'
 
@@ -117,6 +118,25 @@ async function start(userId: string, email?: string) {
     stopFns.push(unsub)
   }
 
+  // Name / branding / currency follow the account to every phone.
+  const profileRef = fs.doc(store, 'users', userId, 'meta', 'profile')
+  stopFns.push(
+    fs.onSnapshot(profileRef, async (snap) => {
+      if (snap.metadata.hasPendingWrites) return
+      const remote = snap.data() as (Partial<Settings> & { updatedAt?: string }) | undefined
+      const local = await getSettings()
+      if (remote?.updatedAt && remote.updatedAt > (local.profileUpdatedAt ?? '')) {
+        const patch: Partial<Settings> = { profileUpdatedAt: remote.updatedAt, onboarded: true }
+        for (const k of PROFILE_KEYS) if (remote[k] !== undefined) (patch as Record<string, unknown>)[k] = remote[k]
+        await saveSettings(patch, true)
+      } else if (local.profileUpdatedAt && local.profileUpdatedAt > (remote?.updatedAt ?? '')) pushProfile()
+    }),
+  )
+  const profSub = liveQuery(() => db.settings.get('app')).subscribe((row) => {
+    if (row?.profileUpdatedAt && row.profileUpdatedAt !== lastProfilePush) pushProfile()
+  })
+  stopFns.push(() => profSub.unsubscribe())
+
   // Upload whenever the outbox changes.
   let timer: number | undefined
   const sub = liveQuery(() => db.outbox.count()).subscribe((n) => {
@@ -125,6 +145,22 @@ async function start(userId: string, email?: string) {
     if (n > 0) timer = window.setTimeout(flush, 600)
   })
   stopFns.push(() => sub.unsubscribe())
+}
+
+let lastProfilePush = ''
+async function pushProfile() {
+  if (!fb || !uid) return
+  const local = await getSettings()
+  if (!local.profileUpdatedAt || local.profileUpdatedAt === lastProfilePush) return
+  lastProfilePush = local.profileUpdatedAt
+  const data: Record<string, unknown> = { updatedAt: local.profileUpdatedAt }
+  for (const k of PROFILE_KEYS) data[k] = local[k] ?? null
+  try {
+    await fb.fs.setDoc(fb.fs.doc(fb.store, 'users', uid, 'meta', 'profile'), data)
+  } catch (e) {
+    lastProfilePush = ''
+    console.warn('Profile sync failed', e)
+  }
 }
 
 /** Writes remote records locally when they are newer. Does not queue them again. */
@@ -174,6 +210,15 @@ export async function flush() {
 
 // ---- Account actions ----
 
+/** Error with the Firebase code kept, so the screen can react (e.g. offer "create account"). */
+export class SyncAuthError extends Error {
+  code: string
+  constructor(code: string, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
 function friendly(e: unknown): string {
   const code = (e as { code?: string })?.code ?? ''
   const map: Record<string, string> = {
@@ -181,7 +226,7 @@ function friendly(e: unknown): string {
     'auth/missing-password': 'Please enter a password.',
     'auth/weak-password': 'Password must be at least 6 characters.',
     'auth/email-already-in-use': 'An account with this email already exists — sign in instead.',
-    'auth/invalid-credential': 'Wrong email or password.',
+    'auth/invalid-credential': 'Email or password not recognised.',
     'auth/wrong-password': 'Wrong email or password.',
     'auth/user-not-found': 'No account with this email — create one.',
     'auth/too-many-requests': 'Too many attempts. Please wait a minute and try again.',
@@ -197,7 +242,7 @@ export async function signIn(email: string, password: string, create: boolean) {
     if (create) await fb.auth.createUserWithEmailAndPassword(fb.a, email.trim(), password)
     else await fb.auth.signInWithEmailAndPassword(fb.a, email.trim(), password)
   } catch (e) {
-    throw new Error(friendly(e))
+    throw new SyncAuthError((e as { code?: string })?.code ?? '', friendly(e))
   }
 }
 

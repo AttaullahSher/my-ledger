@@ -47,7 +47,8 @@ export function HomePage() {
   const searching = !!q.trim()
   const hasData = !!data?.people.length
   const days = daysSince(settings.lastBackupAt)
-  const unsafe = hasData && sync.status !== 'synced' && sync.status !== 'syncing' && settings.backupReminder > 0 && days >= settings.backupReminder
+  // Only nag when the records are NOT protected by auto-sync.
+  const unsafe = hasData && !sync.email && settings.backupReminder > 0 && days >= settings.backupReminder
 
   return (
     <>

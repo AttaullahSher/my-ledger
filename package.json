@@ -15,7 +15,6 @@
   "dependencies": {
     "dexie": "^4.4.7",
     "dexie-react-hooks": "^4.4.0",
-    "exceljs": "^4.4.0",
     "firebase": "^13.2.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
@@ -40,5 +39,5 @@
     "vitest": "^5.1.0"
   },
   "author": "Attaullah Sher",
-  "description": "My Ledger \u2014 a simple private money ledger: who owes whom."
+  "description": "My Ledger — a simple private money ledger: who owes whom."
 }

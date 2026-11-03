@@ -7,14 +7,11 @@ import {
   CloudUpload,
   Database,
   Download,
-  FileSpreadsheet,
   History,
   KeyRound,
   Link2,
   Lock,
-  LogOut,
   Palette,
-  RefreshCw,
   RotateCcw,
   ScanFace,
   ShieldCheck,
@@ -26,15 +23,15 @@ import { useDangerGuard } from '../components/PinGuard'
 import { useFileShare } from '../components/useFileShare'
 import { useSync } from '../components/useSync'
 import { BrandingSheet } from '../components/Welcome'
-import { Button, Field, Segmented, Sheet, cx, inputCls } from '../components/ui'
+import { SyncCard } from '../components/SyncCard'
+import { Button, Field, Segmented, Sheet, cx } from '../components/ui'
 import { backupFileName, buildBackup, clearAllData, parseBackupText, restoreBackup, takeSnapshot, type ValidationResult } from '../lib/backup'
 import { alive, db } from '../lib/db'
 import { daysSince, formatDate, formatDateTime } from '../lib/dates'
-import { fullCSVs, fullXLSX } from '../lib/exporters'
 import * as repo from '../lib/repo'
 import { biometricsAvailable, registerBiometrics, verifyBiometrics } from '../lib/security'
 import { downloadFile, shareText } from '../lib/share'
-import { flush, forgetSyncAccount, resetPassword, signIn, signOutSync } from '../lib/sync'
+import { forgetSyncAccount } from '../lib/sync'
 import { CURRENCIES, type DateFormat, type Snapshot, type ThemeSetting } from '../lib/types'
 
 const APP_VERSION = '2.0.0'
@@ -53,7 +50,6 @@ export function SettingsPage() {
   const [bio, setBio] = useState(false)
   const [storage, setStorage] = useState<{ used?: number; persisted?: boolean }>({})
   const counts = useLiveQuery(async () => ({ people: await db.people.filter(alive).count(), txs: await db.transactions.filter(alive).count() }), [])
-  const o = { currency: settings.currency, dateFormat: settings.dateFormat, title: settings.appTitle, owner: settings.ownerName, accent: settings.accent }
 
   useEffect(() => {
     const anchor = location.hash.split('#').pop()
@@ -176,13 +172,19 @@ export function SettingsPage() {
         </Group>
 
         {/* ---------- Backup ---------- */}
-        <Title id="backup">Backup & restore</Title>
+        <Title id="backup">{sync.email ? 'Extra backup (optional)' : 'Backup & restore'}</Title>
+        {sync.email ? (
+          <Group>
+            <Row icon={<CloudUpload size={20} />} title={busy === 'backup' ? 'Preparing…' : 'Save a backup file'} sub="Not needed with auto-sync — an extra copy for peace of mind" onClick={backupNow} />
+            <Row icon={<Upload size={20} />} title="Restore from a backup file" onClick={() => fileInput.current?.click()} />
+          </Group>
+        ) : (
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
           <div className={cx('flex items-start gap-3 rounded-xl p-3 text-sm', total && days >= settings.backupReminder && sync.status !== 'synced' ? 'bg-amber-50 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200' : 'bg-green-50 text-green-900 dark:bg-green-950/50 dark:text-green-200')}>
             <ShieldCheck size={20} className="mt-0.5 shrink-0" />
             <div>
               <div className="font-semibold">{settings.lastBackupAt ? `Last backup file: ${formatDateTime(settings.lastBackupAt, settings.dateFormat)}` : 'No backup file saved yet'}</div>
-              A backup file in <b>Files → iCloud Drive</b> is your extra copy{sync.status === 'synced' ? ', on top of auto-sync' : ''}.
+              Turn on <b>Auto-sync</b> above, or save a backup file to <b>Files → iCloud Drive</b> regularly.
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -193,17 +195,6 @@ export function SettingsPage() {
               <Upload size={18} /> Restore
             </Button>
           </div>
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              e.target.value = ''
-              if (f) setPreview(parseBackupText(await f.text()))
-            }}
-          />
           <div className="mt-4 flex items-center justify-between gap-3 text-sm">
             <div>
               <div className="font-medium">Backup reminder</div>
@@ -218,10 +209,20 @@ export function SettingsPage() {
             </select>
           </div>
         </div>
+        )}
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (f) setPreview(parseBackupText(await f.text()))
+          }}
+        />
         <Group>
           <Row icon={<History size={20} />} title="Safety snapshots" sub="Automatic daily copies on this phone (undo mistakes)" onClick={() => setShowSnaps(true)} chevron />
-          <Row icon={<FileSpreadsheet size={20} className="text-emerald-700" />} title={busy === 'xlsx' ? 'Preparing…' : 'Export Excel workbook'} sub="People, all entries, balances, summary" onClick={() => share('xlsx', async () => [await fullXLSX(await buildBackup(), o)], 'Ledger export')} />
-          <Row icon={<FileSpreadsheet size={20} />} title={busy === 'csv' ? 'Preparing…' : 'Export CSV files'} sub="People and entries" onClick={() => share('csv', async () => fullCSVs(await buildBackup(), o), 'Ledger CSV')} />
         </Group>
 
         {/* ---------- Preferences ---------- */}
@@ -361,107 +362,6 @@ function Toggle({ icon, title, sub, on, onChange }: { icon: ReactNode; title: st
         <span className={cx('absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow transition-all', on ? 'left-[22px]' : 'left-[2px]')} />
       </button>
     </label>
-  )
-}
-
-// ---------- Auto-sync card ----------
-
-function SyncCard() {
-  const s = useSync()
-  const { toast, settings } = useApp()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [create, setCreate] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  const card = 'rounded-2xl bg-white p-4 text-sm shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10'
-
-  if (s.status === 'off')
-    return (
-      <div className={card}>
-        <div className="font-semibold">Not available yet</div>
-        <p className="mt-1 text-slate-500">Auto-sync will appear here once it is switched on for this app. Meanwhile use “Back up now” regularly.</p>
-      </div>
-    )
-
-  if (s.email)
-    return (
-      <div className={card}>
-        <div className="flex items-center gap-3">
-          <div className={cx('h-2.5 w-2.5 rounded-full', s.status === 'synced' ? 'bg-pos' : s.status === 'error' ? 'bg-neg' : 'bg-amber-500')} />
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">
-              {s.status === 'synced' ? 'All changes saved to your account' : s.status === 'syncing' ? 'Syncing…' : s.status === 'offline' ? `Offline — ${s.pending} change(s) waiting` : 'Sync problem'}
-            </div>
-            <div className="truncate text-slate-500">
-              {s.email}
-              {s.lastSyncAt ? ` · ${formatDateTime(s.lastSyncAt, settings.dateFormat)}` : ''}
-            </div>
-          </div>
-        </div>
-        {s.error && s.status === 'error' && <p className="mt-2 text-red-600">{s.error}</p>}
-        <p className="mt-3 text-slate-500">Every change is saved automatically. On a new phone, install the app and sign in with the same email to get everything back.</p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={() => flush()}>
-            <RefreshCw size={17} /> Sync now
-          </Button>
-          <Button variant="secondary" onClick={() => signOutSync().then(() => toast('Signed out — records stay on this phone'))}>
-            <LogOut size={17} /> Sign out
-          </Button>
-        </div>
-      </div>
-    )
-
-  async function go() {
-    setBusy(true)
-    setError('')
-    try {
-      await signIn(email, password, create)
-      setPassword('')
-      toast(create ? 'Account created — auto-sync is on' : 'Signed in — syncing')
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className={card}>
-      <div className="font-semibold">Never lose your records</div>
-      <p className="mt-1 text-slate-500">Create a free private account with your email. Every change is saved automatically and restored on any new phone. Only you can see your records.</p>
-      {s.error && <p className="mt-2 text-red-600">{s.error}</p>}
-      <div className="mt-3 space-y-2">
-        <input className={inputCls} type="email" inputMode="email" autoComplete="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input className={inputCls} type="password" autoComplete={create ? 'new-password' : 'current-password'} placeholder={create ? 'Choose a password (6+ characters)' : 'Password'} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && go()} />
-        {error && <p className="text-red-600">{error}</p>}
-        <Button className="w-full" disabled={busy || !email || !password} onClick={go}>
-          {busy ? 'Please wait…' : create ? 'Create account & turn on sync' : 'Sign in & sync'}
-        </Button>
-        <div className="flex justify-between pt-1 text-[13px] font-semibold text-blue-600 dark:text-blue-400">
-          <button type="button" onClick={() => setCreate((v) => !v)}>
-            {create ? 'I already have an account' : 'Create a new account'}
-          </button>
-          {!create && (
-            <button
-              type="button"
-              onClick={async () => {
-                if (!email) return setError('Enter your email first.')
-                try {
-                  await resetPassword(email)
-                  toast('Password reset email sent')
-                } catch (e) {
-                  setError((e as Error).message)
-                }
-              }}
-            >
-              Forgot password?
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
   )
 }
 

@@ -5,7 +5,7 @@ import { dashboardTotals, personTotals, splitSettled, totalsByPerson } from '../
 import { formatMoney, parseAmountToFils } from '../src/lib/money'
 import * as repo from '../src/lib/repo'
 import { buildBackup, clearAllData, restoreBackup, takeSnapshot, validateBackup } from '../src/lib/backup'
-import { fullCSVs, fullXLSX, personCSV, statementRows, statementText } from '../src/lib/exporters'
+import { personStatementPDF, statementRows, statementText } from '../src/lib/exporters'
 import { parseVCards } from '../src/lib/contacts'
 
 let n = 0
@@ -165,27 +165,21 @@ describe('backup and restore', () => {
 })
 
 describe('exports', () => {
-  it('statement rows, CSV and text contain correct data', async () => {
+  it('statement rows and WhatsApp text contain correct data', async () => {
     const ahmed = await ahmedExample()
     const txs = await liveTxsOf(ahmed.id)
     const s = statementRows(txs, { from: '2026-11-02' })
     expect([s.opening, s.closing]).toEqual([50000, 40000])
-    const csv = await personCSV(ahmed, txs, {}, opts).text()
-    expect(csv).toContain('2026-11-01,Money given,Rent,,500.00,,500.00')
     const text = statementText(ahmed, txs, {}, opts)
     expect(text).toContain('Total given: AED 600')
     expect(text).toContain('You owe me AED 400.')
   })
 
-  it('full exports include every sheet and file', async () => {
-    await ahmedExample()
-    const b = await buildBackup()
-    expect(fullCSVs(b, opts).map((f) => f.name.split('-')[0])).toEqual(['people', 'transactions'])
-    const xlsx = await fullXLSX(b, opts)
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    await wb.xlsx.load(await xlsx.arrayBuffer())
-    expect(wb.worksheets.map((w) => w.name).sort()).toEqual(['All transactions', 'Individual balances', 'People', 'Summary'])
+  it('creates a PDF statement', async () => {
+    const ahmed = await ahmedExample()
+    const pdf = await personStatementPDF(ahmed, await liveTxsOf(ahmed.id), {}, { ...opts, owner: 'Attaullah Sher', title: "Atta's Ledger" })
+    expect(pdf.type).toBe('application/pdf')
+    expect(pdf.size).toBeGreaterThan(2000)
   })
 })
 

@@ -53,6 +53,8 @@ export interface Settings {
   appTitle?: string
   accent?: string
   onboarded?: boolean
+  /** When name/branding/currency last changed (used to sync them between phones). */
+  profileUpdatedAt?: string | null
 }
 
 export interface SettingsRow extends Settings {
@@ -104,3 +106,6 @@ export interface OutboxItem {
 export const REASON_SUGGESTIONS = ['Loan', 'Cash', 'Rent', 'Food', 'Fuel', 'Shopping', 'Transport', 'Salary', 'Bill', 'Other']
 
 export const CURRENCIES = ['AED', 'SAR', 'QAR', 'KWD', 'OMR', 'BHD', 'PKR', 'INR', 'USD', 'EUR', 'GBP']
+
+/** Settings that follow the user to every phone through auto-sync. PIN / Face ID stay on each phone. */
+export const PROFILE_KEYS = ['ownerName', 'appTitle', 'accent', 'currency', 'dateFormat'] as const

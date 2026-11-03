@@ -7,8 +7,8 @@ Record money you **give** to people and money you **receive** from them in a few
 - 🟢 **Green** — they have to pay me (money I gave)
 - 🔴 **Red** — I have to pay them (money I received)
 - Open balances on top, **settled people collapsed** below, long lists paged
-- Person profiles with Call / WhatsApp buttons, add people **from contacts**
-- **Share statement** as PDF or WhatsApp text; export Excel / CSV
+- Person profiles; add people **from your iPhone contacts**
+- **Share statement** as PDF or a WhatsApp summary
 - **Auto-sync** to your own private account (optional) + backup files + daily on-phone snapshots
 - **Face ID / PIN** app lock, PIN-protected danger zone, “Forgot PIN” recovery
 - Your own **name, app title and colour**
