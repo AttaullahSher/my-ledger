@@ -7,7 +7,7 @@ import { db } from './db'
 import { PROFILE_KEYS, type Person, type Settings, type Transaction } from './types'
 import { getSettings, saveSettings } from './repo'
 
-export type SyncStatus = 'off' | 'signed-out' | 'syncing' | 'synced' | 'offline' | 'error'
+export type SyncStatus = 'off' | 'starting' | 'signed-out' | 'syncing' | 'synced' | 'offline' | 'error'
 
 export interface SyncState {
   status: SyncStatus
@@ -17,7 +17,7 @@ export interface SyncState {
   error?: string
 }
 
-let state: SyncState = { status: firebaseConfig ? 'signed-out' : 'off', pending: 0 }
+let state: SyncState = { status: firebaseConfig ? 'starting' : 'off', pending: 0 }
 const listeners = new Set<() => void>()
 const set = (patch: Partial<SyncState>) => {
   state = { ...state, ...patch }

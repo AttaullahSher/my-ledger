@@ -15,6 +15,14 @@ export function AppLock({ children }: { children: ReactNode }) {
   const enabled = !!(settings.lockOnOpen && settings.pinHash)
   const [unlocked, setUnlocked] = useState(false)
   const hiddenAt = useRef<number | null>(null)
+  const prevEnabled = useRef<boolean | null>(null)
+
+  // Turning the lock on during this session should not lock you out immediately.
+  useEffect(() => {
+    if (!ready) return
+    if (prevEnabled.current === false && enabled) setUnlocked(true)
+    prevEnabled.current = enabled
+  }, [ready, enabled])
 
   useEffect(() => {
     const onVis = () => {

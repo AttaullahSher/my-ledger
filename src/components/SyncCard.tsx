@@ -50,7 +50,7 @@ export function SyncCard({ onDone }: { onDone?: () => void }) {
           <Button variant="secondary" onClick={() => flush()}>
             <RefreshCw size={17} /> Sync now
           </Button>
-          <Button variant="secondary" onClick={() => signOutSync().then(() => toast('Signed out — records stay on this phone'))}>
+          <Button variant="secondary" onClick={() => signOutSync().then(() => toast('Signed out'))}>
             <LogOut size={17} /> Sign out
           </Button>
         </div>

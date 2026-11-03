@@ -9,6 +9,7 @@ export function SyncBadge() {
   const nav = useNavigate()
   if (s.status === 'off') return null
   const map = {
+    starting: { icon: Cloud, cls: 'text-slate-400', label: 'Starting sync' },
     'signed-out': { icon: Cloud, cls: 'text-slate-400', label: 'Auto-sync is off' },
     syncing: { icon: RefreshCw, cls: 'text-blue-500 animate-spin [animation-duration:1.5s]', label: 'Syncing' },
     synced: { icon: CloudCheck, cls: 'text-pos', label: 'All changes synced' },
