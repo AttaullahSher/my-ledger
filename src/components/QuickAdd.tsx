@@ -176,6 +176,7 @@ function PersonPicker({
   onClear: () => void
 }) {
   const [q, setQ] = useState('')
+  const [newName, setNewName] = useState('')
   const [mobile, setMobile] = useState('')
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -190,14 +191,13 @@ function PersonPicker({
     return list.sort((a, b) => last(b).localeCompare(last(a))).slice(0, s ? 20 : 6)
   }, [q, people, summaries])
 
-  const exact = people.some((p) => p.name.toLowerCase() === q.trim().toLowerCase())
-
   async function create() {
     setErr('')
     setBusy(true)
     try {
-      const p = await repo.addPerson({ name: q, phone: mobile })
+      const p = await repo.addPerson({ name: newName, phone: mobile })
       setQ('')
+      setNewName('')
       setMobile('')
       setAdding(false)
       onPick(p)
@@ -238,16 +238,36 @@ function PersonPicker({
 
   return (
     <div>
-      <span className="mb-1.5 block text-[13px] font-medium text-slate-500 dark:text-slate-400">Person</span>
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">Person</span>
+        {!adding && (
+          <button type="button" onClick={() => { setAdding(true); setNewName(q.trim()); setErr('') }} className="flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1.5 text-[13px] font-semibold text-blue-600 active:bg-blue-100 dark:bg-blue-950 dark:text-blue-300">
+            <UserPlus size={15} /> New person
+          </button>
+        )}
+      </div>
+      {adding ? (
+        <div className="space-y-2 rounded-2xl bg-blue-50/60 p-3 ring-1 ring-blue-100 dark:bg-blue-950/40 dark:ring-blue-900">
+          <input autoFocus className={inputCls} placeholder="Name" autoCapitalize="words" value={newName} onChange={(e) => setNewName(e.target.value)} />
+          <input type="tel" inputMode="tel" className={inputCls} placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
+          {err && <div className="text-sm text-red-600">{err}</div>}
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <Button disabled={busy} onClick={create}>
+              <UserPlus size={17} /> Add person
+            </Button>
+            <Button variant="secondary" onClick={() => setAdding(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="relative">
         <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           className={cx(inputCls, 'pl-10 pr-10')}
           value={q}
-          onChange={(e) => {
-            setQ(e.target.value)
-            setAdding(false)
-          }}
+          onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
@@ -279,35 +299,10 @@ function PersonPicker({
             </span>
           </button>
         ))}
-        {q.trim() && !exact && !adding && (
-          <button type="button" onClick={() => setAdding(true)} className="flex w-full items-center gap-3 px-3 py-3 text-left font-semibold text-blue-600 active:bg-slate-100 dark:text-blue-400 dark:active:bg-slate-800">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-50 dark:bg-blue-950">
-              <UserPlus size={18} />
-            </span>
-            Add “{q.trim()}” as new person
-          </button>
-        )}
-        {adding && (
-          <div className="space-y-2 bg-blue-50/60 p-3 dark:bg-blue-950/40">
-            <div className="text-sm font-semibold">New person: {q.trim()}</div>
-            <input
-              autoFocus
-              type="tel"
-              inputMode="tel"
-              className={inputCls}
-              placeholder="Mobile number (required)"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && create()}
-            />
-            {err && <div className="text-sm text-red-600">{err}</div>}
-            <Button className="w-full" disabled={busy} onClick={create}>
-              <UserPlus size={17} /> Add person
-            </Button>
-          </div>
-        )}
-        {!q.trim() && matches.length === 0 && <div className="px-3 py-4 text-center text-sm text-slate-500">Type a name to add your first person.</div>}
+        {matches.length === 0 && <div className="px-3 py-4 text-center text-sm text-slate-500">{q.trim() ? 'No one found — tap “New person”.' : 'Tap “New person” to add your first person.'}</div>}
       </div>
+      </>
+      )}
     </div>
   )
 }

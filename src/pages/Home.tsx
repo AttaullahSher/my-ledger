@@ -1,10 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Search, Settings, UserPlus, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search, UserPlus, Users } from 'lucide-react'
 import { useApp } from '../components/AppContext'
 import { PersonForm } from '../components/PersonForm'
-import { SyncBadge } from '../components/SyncBadge'
+import { SettingsButton } from '../components/SyncBadge'
 import { Welcome } from '../components/Welcome'
 import { Avatar, Empty, IconButton, cx, inputCls } from '../components/ui'
 import { livePeople, liveTransactions } from '../lib/db'
@@ -54,13 +54,10 @@ export function HomePage() {
             {settings.ownerName && <div className="-mt-0.5 truncate text-sm text-slate-500">{settings.ownerName}</div>}
           </div>
           <div className="flex shrink-0 items-center">
-            <SyncBadge />
             <IconButton label="Add person" onClick={() => setAdding(true)}>
               <UserPlus size={21} />
             </IconButton>
-            <IconButton label="Settings" onClick={() => nav('/settings')}>
-              <Settings size={21} />
-            </IconButton>
+            <SettingsButton />
           </div>
         </div>
       </header>
