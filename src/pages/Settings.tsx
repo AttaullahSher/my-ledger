@@ -9,7 +9,6 @@ import {
   Download,
   History,
   KeyRound,
-  Link2,
   Lock,
   Palette,
   RotateCcw,
@@ -30,7 +29,7 @@ import { alive, db } from '../lib/db'
 import { daysSince, formatDate, formatDateTime } from '../lib/dates'
 import * as repo from '../lib/repo'
 import { biometricsAvailable, registerBiometrics, verifyBiometrics } from '../lib/security'
-import { downloadFile, shareText } from '../lib/share'
+import { downloadFile } from '../lib/share'
 import { forgetSyncAccount } from '../lib/sync'
 import { CURRENCIES, type DateFormat, type Snapshot, type ThemeSetting } from '../lib/types'
 
@@ -133,12 +132,6 @@ export function SettingsPage() {
     } catch {
       toast('Face ID was not set up', 'error')
     }
-  }
-
-  async function shareApp() {
-    const url = location.origin + location.pathname
-    const text = `A simple private money ledger for your phone — who owes whom. Open in Safari, tap Share → “Add to Home Screen”. Your records stay private to you.\n${url}`
-    if ((await shareText(text, 'My Ledger')) === 'downloaded') toast('Link copied')
   }
 
   const days = daysSince(settings.lastBackupAt)
@@ -256,11 +249,6 @@ export function SettingsPage() {
             </Field>
           </div>
         </div>
-
-        <Title>Share with family & friends</Title>
-        <Group>
-          <Row icon={<Link2 size={20} />} title="Share app link" sub="Everyone gets their own private ledger" onClick={shareApp} />
-        </Group>
 
         <Title>Storage</Title>
         <div className="space-y-3 rounded-2xl bg-white p-4 text-sm shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">

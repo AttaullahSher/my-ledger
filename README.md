@@ -24,7 +24,7 @@ Made by **Attaullah Sher**.
 2. Tap **Share** → **Add to Home Screen** → **Add**.
 3. Always open it from the Home Screen icon.
 
-Share it with family: **Settings → Share app link**. Everyone gets their own empty, private ledger.
+Private use for a small circle. Each person who installs it gets their own empty, private ledger.
 
 ## Keep your records safe
 
