@@ -26,21 +26,19 @@ export interface Transaction {
   reason?: string
   notes?: string
   date: string // YYYY-MM-DD
+  /** AED, PKR or USD. Older entries without one are AED. */
+  currency?: string
   createdAt: string
   updatedAt: string
   deletedAt?: string | null
 }
 
 export type ThemeSetting = 'system' | 'light' | 'dark'
-export type DateFormat = 'D MMM YYYY' | 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
 
 export interface Settings {
+  /** Default currency for new entries. */
   currency: string
   theme: ThemeSetting
-  dateFormat: DateFormat
-  /** Remind me to back up after this many days. 0 = never remind. */
-  backupReminder: number
-  lastBackupAt?: string | null
   /** PIN protecting dangerous actions (salted SHA-256). Stays on this device only. */
   pinHash?: string | null
   pinSalt?: string | null
@@ -64,9 +62,6 @@ export interface SettingsRow extends Settings {
 export const DEFAULT_SETTINGS: Settings = {
   currency: 'AED',
   theme: 'system',
-  dateFormat: 'D MMM YYYY',
-  backupReminder: 7,
-  lastBackupAt: null,
   pinHash: null,
   pinSalt: null,
   lockOnOpen: false,
@@ -86,15 +81,6 @@ export const ACCENTS = [
   { name: 'Gold', value: '#a16207' },
 ]
 
-/** Automatic on-device safety copy of the whole ledger. */
-export interface Snapshot {
-  id: string
-  createdAt: string
-  reason: string
-  counts: { people: number; transactions: number }
-  json: string
-}
-
 /** A local change waiting to be uploaded to cloud sync. */
 export interface OutboxItem {
   key: string // `${table}:${id}`
@@ -105,7 +91,8 @@ export interface OutboxItem {
 
 export const REASON_SUGGESTIONS = ['Loan', 'Cash', 'Rent', 'Food', 'Fuel', 'Shopping', 'Transport', 'Salary', 'Bill', 'Other']
 
-export const CURRENCIES = ['AED', 'SAR', 'QAR', 'KWD', 'OMR', 'BHD', 'PKR', 'INR', 'USD', 'EUR', 'GBP']
+export const CURRENCIES = ['AED', 'PKR', 'USD'] as const
+export const DEFAULT_CURRENCY = 'AED'
 
 /** Settings that follow the user to every phone through auto-sync. PIN / Face ID stay on each phone. */
-export const PROFILE_KEYS = ['ownerName', 'appTitle', 'accent', 'currency', 'dateFormat'] as const
+export const PROFILE_KEYS = ['ownerName', 'appTitle', 'accent', 'currency'] as const

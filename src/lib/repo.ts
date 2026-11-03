@@ -2,8 +2,8 @@
 import Dexie from 'dexie'
 import { db, liveTxsOf, newId, nowISO, queue } from './db'
 import { isValidISODate } from './dates'
-import { personTotals, settlementFor } from './ledger'
-import { DEFAULT_SETTINGS, PROFILE_KEYS, type Direction, type Person, type Settings, type Transaction } from './types'
+import { curOf, personSummary, settlementFor } from './ledger'
+import { CURRENCIES, DEFAULT_CURRENCY, DEFAULT_SETTINGS, PROFILE_KEYS, type Direction, type Person, type Settings, type Transaction } from './types'
 
 export class ValidationError extends Error {}
 
@@ -13,6 +13,15 @@ function assertAmount(fils: number) {
 function assertDate(date: string) {
   if (!isValidISODate(date)) throw new ValidationError('Please choose a valid date.')
 }
+/** Keeps + and digits only; a mobile number needs at least 7 digits. */
+export function cleanPhone(p?: string | null): string | undefined {
+  const v = (p ?? '').trim().replace(/[^\d+]/g, '')
+  return v.replace(/\D/g, '').length >= 7 ? v : undefined
+}
+function assertCurrency(c?: string) {
+  if (c && !(CURRENCIES as readonly string[]).includes(c)) throw new ValidationError('Currency must be AED, PKR or USD.')
+}
+
 const clean = (s?: string | null) => {
   const v = (s ?? '').trim()
   return v ? v : undefined
@@ -29,11 +38,13 @@ const rw = <T>(fn: () => Promise<T>) => db.transaction('rw', [db.people, db.tran
 export async function addPerson(input: { name: string; phone?: string; notes?: string; id?: string }): Promise<Person> {
   const name = clean(input.name)
   if (!name) throw new ValidationError('Please enter a name.')
+  const phone = cleanPhone(input.phone)
+  if (!phone) throw new ValidationError('Please enter a valid mobile number.')
   const ts = nowISO()
   const person: Person = {
     id: input.id ?? newId(),
     name,
-    phone: clean(input.phone),
+    phone,
     notes: clean(input.notes),
     createdAt: ts,
     updatedAt: ts,
@@ -51,13 +62,13 @@ export async function addPerson(input: { name: string; phone?: string; notes?: s
   return person
 }
 
-/** Adds several people at once (contacts import). Skips names that already exist. */
+/** Adds several people at once (contacts import). Skips names that already exist or have no mobile. */
 export async function addPeople(list: { name: string; phone?: string }[]): Promise<number> {
   const existing = new Set((await db.people.toArray()).filter((p) => !p.deletedAt).map((p) => p.name.toLowerCase()))
   let added = 0
   for (const c of list) {
     const name = clean(c.name)
-    if (!name || existing.has(name.toLowerCase())) continue
+    if (!name || !cleanPhone(c.phone) || existing.has(name.toLowerCase())) continue
     await addPerson({ name, phone: c.phone })
     existing.add(name.toLowerCase())
     added++
@@ -75,7 +86,9 @@ async function touchPerson(id: string, patch: Partial<Person>) {
 export async function updatePerson(id: string, input: { name: string; phone?: string; notes?: string }) {
   const name = clean(input.name)
   if (!name) throw new ValidationError('Please enter a name.')
-  await touchPerson(id, { name, phone: clean(input.phone), notes: clean(input.notes) })
+  const phone = cleanPhone(input.phone)
+  if (!phone) throw new ValidationError('Please enter a valid mobile number.')
+  await touchPerson(id, { name, phone, notes: clean(input.notes) })
 }
 
 export const archivePerson = (id: string) => touchPerson(id, { archivedAt: nowISO() })
@@ -103,11 +116,13 @@ export interface TransactionInput {
   reason?: string
   notes?: string
   date: string
+  currency?: string
 }
 
 export async function addTransaction(input: TransactionInput): Promise<Transaction> {
   assertAmount(input.amountInFils)
   assertDate(input.date)
+  assertCurrency(input.currency)
   if (!input.personId) throw new ValidationError('Please choose a person.')
   const ts = nowISO()
   const tx: Transaction = {
@@ -119,6 +134,7 @@ export async function addTransaction(input: TransactionInput): Promise<Transacti
     reason: clean(input.reason),
     notes: clean(input.notes),
     date: input.date,
+    currency: input.currency || DEFAULT_CURRENCY,
     createdAt: ts,
     updatedAt: ts,
     deletedAt: null,
@@ -139,6 +155,7 @@ export async function addTransaction(input: TransactionInput): Promise<Transacti
 export async function updateTransaction(id: string, input: TransactionInput) {
   assertAmount(input.amountInFils)
   assertDate(input.date)
+  assertCurrency(input.currency)
   await rw(async () => {
     const existing = await db.transactions.get(id)
     if (!existing || existing.deletedAt) throw new ValidationError('Entry not found.')
@@ -150,6 +167,7 @@ export async function updateTransaction(id: string, input: TransactionInput) {
       reason: clean(input.reason),
       notes: clean(input.notes),
       date: input.date,
+      currency: input.currency || curOf(existing),
       updatedAt: nowISO(),
     })
     await queue('transactions', [id])
@@ -164,30 +182,33 @@ export async function deleteTransaction(id: string) {
   })
 }
 
-/** CLEAR BALANCE: adds a settlement entry that brings the balance to zero. History is kept. */
-export async function clearBalance(personId: string, date: string, note?: string): Promise<Transaction | null> {
+/** CLEAR BALANCE: adds one settlement entry per open currency so every balance becomes zero. History is kept. */
+export async function clearBalance(personId: string, date: string): Promise<Transaction[]> {
   assertDate(date)
-  const s = settlementFor(personTotals(await liveTxsOf(personId)).balance)
-  if (!s) return null
   const ts = nowISO()
-  const tx: Transaction = {
-    id: newId(),
-    type: 'settlement',
-    direction: s.direction,
-    personId,
-    amountInFils: s.amountInFils,
-    reason: 'Balance cleared',
-    notes: clean(note),
-    date,
-    createdAt: ts,
-    updatedAt: ts,
-    deletedAt: null,
+  const out: Transaction[] = []
+  for (const { currency, balance } of personSummary(await liveTxsOf(personId)).open) {
+    const s = settlementFor(balance)!
+    out.push({
+      id: newId(),
+      type: 'settlement',
+      direction: s.direction,
+      personId,
+      amountInFils: s.amountInFils,
+      reason: 'Balance cleared',
+      date,
+      currency,
+      createdAt: ts,
+      updatedAt: ts,
+      deletedAt: null,
+    })
   }
+  if (!out.length) return out
   await rw(async () => {
-    await db.transactions.add(tx)
-    await queue('transactions', [tx.id])
+    await db.transactions.bulkAdd(out)
+    await queue('transactions', out.map((t) => t.id))
   })
-  return tx
+  return out
 }
 
 // ---------- Settings (device only) ----------

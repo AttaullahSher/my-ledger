@@ -11,6 +11,8 @@ interface GuardOpts {
   confirmText: string
   /** Word the user must type as the final confirmation. */
   typeWord?: string
+  /** Skip the warning step and go straight to the PIN. */
+  pinOnly?: boolean
 }
 
 type Step = 'warn' | 'pin' | 'setpin'
@@ -35,10 +37,12 @@ export function PinGuardProvider({ children }: { children: ReactNode }) {
   const [tries, setTries] = useState(0)
   const [forgot, setForgot] = useState(false)
   const resolver = useRef<(v: boolean) => void>(undefined)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
 
   const guard = useCallback((o: GuardOpts) => {
     setOpts(o)
-    setStep('warn')
+    setStep(o.pinOnly ? (settingsRef.current.pinHash ? 'pin' : 'setpin') : 'warn')
     setPin('')
     setPin2('')
     setWord('')
@@ -112,7 +116,7 @@ export function PinGuardProvider({ children }: { children: ReactNode }) {
             )}
             {step === 'pin' && (
               <>
-                <p className="text-[15px] text-slate-600 dark:text-slate-300">Step 2 of 2 — enter your PIN{opts.typeWord ? ` and type ${opts.typeWord}` : ''}.</p>
+                <p className="text-[15px] text-slate-600 dark:text-slate-300">{opts.pinOnly ? opts.message : <>Step 2 of 2 — enter your PIN{opts.typeWord ? ` and type ${opts.typeWord}` : ''}.</>}</p>
                 {pinInput(pin, setPin, 'Security PIN', true)}
                 {opts.typeWord && (
                   <input

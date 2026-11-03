@@ -1,17 +1,16 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, CloudOff, CloudUpload, Search, Settings, UserPlus, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search, Settings, UserPlus, Users } from 'lucide-react'
 import { useApp } from '../components/AppContext'
 import { PersonForm } from '../components/PersonForm'
 import { SyncBadge } from '../components/SyncBadge'
 import { Welcome } from '../components/Welcome'
 import { Avatar, Empty, IconButton, cx, inputCls } from '../components/ui'
 import { livePeople, liveTransactions } from '../lib/db'
-import { daysSince, relativeDay } from '../lib/dates'
-import { dashboardTotals, totalsByPerson, type PersonTotals } from '../lib/ledger'
+import { formatDate } from '../lib/dates'
+import { dashboardTotals, summariesByPerson, type PersonSummary } from '../lib/ledger'
 import { formatMoney } from '../lib/money'
-import { useSync } from '../components/useSync'
 import type { Person } from '../lib/types'
 
 const PAGE = 15
@@ -19,36 +18,32 @@ const PAGE = 15
 export function HomePage() {
   const { settings } = useApp()
   const nav = useNavigate()
-  const sync = useSync()
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
   const [showSettled, setShowSettled] = useState(false)
-  const [showArchived, setShowArchived] = useState(false)
 
   const data = useLiveQuery(async () => {
     const [people, txs] = await Promise.all([livePeople(), liveTransactions()])
-    return { people, totals: totalsByPerson(txs), dash: dashboardTotals(txs) }
+    return { people, sums: summariesByPerson(txs), dash: dashboardTotals(txs) }
   }, [])
 
   const groups = useMemo(() => {
     const s = q.trim().toLowerCase()
+    const digits = s.replace(/\D/g, '')
     const rows = (data?.people ?? [])
-      .filter((p) => !s || p.name.toLowerCase().includes(s) || p.phone?.replace(/\s/g, '').includes(s.replace(/\s/g, '')))
-      .map((p) => ({ p, t: data!.totals.get(p.id) }))
-    const recent = (r: { p: Person; t?: PersonTotals }) => r.t?.lastDate ?? r.p.createdAt.slice(0, 10)
+      .filter((p) => !s || p.name.toLowerCase().includes(s) || (digits.length > 2 && p.phone?.replace(/\D/g, '').includes(digits)))
+      .map((p) => ({ p, s: data!.sums.get(p.id) }))
+    const recent = (r: { p: Person; s?: PersonSummary }) => r.s?.lastDate ?? r.p.createdAt.slice(0, 10)
+    const byRecent = (a: typeof rows[number], b: typeof rows[number]) => recent(b).localeCompare(recent(a))
     return {
-      open: rows.filter((r) => !r.p.archivedAt && (r.t?.balance ?? 0) !== 0).sort((a, b) => Math.abs(b.t!.balance) - Math.abs(a.t!.balance)),
-      settled: rows.filter((r) => !r.p.archivedAt && (r.t?.balance ?? 0) === 0).sort((a, b) => recent(b).localeCompare(recent(a))),
-      archived: rows.filter((r) => !!r.p.archivedAt).sort((a, b) => a.p.name.localeCompare(b.p.name)),
+      open: rows.filter((r) => r.s && !r.s.settled).sort(byRecent),
+      settled: rows.filter((r) => !r.s || r.s.settled).sort(byRecent),
     }
   }, [data, q])
 
-  const c = settings.currency
   const searching = !!q.trim()
   const hasData = !!data?.people.length
-  const days = daysSince(settings.lastBackupAt)
-  // Only nag when the records are NOT protected by auto-sync.
-  const unsafe = hasData && !sync.email && settings.backupReminder > 0 && days >= settings.backupReminder
+  const rows = data?.dash.rows.length ? data.dash.rows : [{ currency: settings.currency || 'AED', theyOweMe: 0, iOweThem: 0 }]
 
   return (
     <>
@@ -71,39 +66,29 @@ export function HomePage() {
       </header>
 
       <div className="mx-auto max-w-2xl px-4">
-        {unsafe && (
-          <Link to="/settings#backup" className="mb-3 flex items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900">
-            {sync.status === 'off' || sync.status === 'signed-out' ? <CloudUpload size={20} className="shrink-0" /> : <CloudOff size={20} className="shrink-0" />}
-            <div>
-              <b>Protect your records.</b> {sync.status === 'signed-out' ? 'Turn on auto-sync' : 'Save a backup'} so nothing is lost if you change or lose your phone.
-            </div>
-          </Link>
-        )}
-
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-pos-line bg-pos-soft p-4 dark:border-green-900 dark:bg-green-950/40">
             <div className="text-[13px] font-medium text-pos">They owe me</div>
-            <div className="tabular mt-1 truncate text-[22px] font-bold text-pos">{formatMoney(data?.dash.theyOweMe ?? 0, c)}</div>
+            {rows.map((r) => (
+              <div key={r.currency} className="tabular mt-1 truncate text-[20px] font-bold leading-tight text-pos">
+                {formatMoney(r.theyOweMe, r.currency)}
+              </div>
+            ))}
           </div>
           <div className="rounded-2xl border border-neg-line bg-neg-soft p-4 dark:border-red-900 dark:bg-red-950/40">
             <div className="text-[13px] font-medium text-neg">I owe them</div>
-            <div className="tabular mt-1 truncate text-[22px] font-bold text-neg">{formatMoney(data?.dash.iOweThem ?? 0, c)}</div>
+            {rows.map((r) => (
+              <div key={r.currency} className="tabular mt-1 truncate text-[20px] font-bold leading-tight text-neg">
+                {formatMoney(r.iOweThem, r.currency)}
+              </div>
+            ))}
           </div>
         </div>
-        {hasData && (
-          <div className="mt-2 px-1 text-[13px] text-slate-500">
-            Net{' '}
-            <b className={cx('tabular', (data?.dash.net ?? 0) > 0 ? 'text-pos' : (data?.dash.net ?? 0) < 0 ? 'text-neg' : '')}>
-              {formatMoney(Math.abs(data?.dash.net ?? 0), c)}
-            </b>{' '}
-            {(data?.dash.net ?? 0) >= 0 ? 'in my favour' : 'against me'} · {data?.dash.openCount ?? 0} open
-          </div>
-        )}
 
         {hasData && (
           <div className="relative mt-4">
             <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input className={cx(inputCls, 'bg-white pl-10 shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900')} placeholder="Search people" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className={cx(inputCls, 'bg-white pl-10 shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900')} placeholder="Search name or mobile" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
         )}
 
@@ -111,7 +96,7 @@ export function HomePage() {
           <Empty
             icon={<Users size={26} />}
             title="No one here yet"
-            text="Tap “Add entry” to record money you gave or received — add the person right there. Or add people first."
+            text="Tap “Add entry” to record money you gave or received — add the person right there."
             action={
               <button className="rounded-xl bg-brand px-4 py-2.5 font-semibold text-white" onClick={() => setAdding(true)}>
                 Add person
@@ -124,7 +109,7 @@ export function HomePage() {
           <>
             <Section title={`Open balances${groups.open.length ? ` (${groups.open.length})` : ''}`}>
               {groups.open.length ? (
-                <Paged rows={groups.open} render={(r) => <PersonRow key={r.p.id} p={r.p} t={r.t} currency={c} />} />
+                <Paged rows={groups.open} render={(r) => <PersonRow key={r.p.id} p={r.p} s={r.s} />} />
               ) : (
                 <div className="rounded-2xl bg-white px-4 py-5 text-center text-sm text-slate-500 ring-1 ring-slate-900/5 dark:bg-slate-900">
                   {searching ? 'No open balances match.' : 'Everyone is settled 🎉'}
@@ -134,15 +119,10 @@ export function HomePage() {
 
             {groups.settled.length > 0 && (
               <Collapsible title={`Settled & closed (${groups.settled.length})`} open={showSettled || searching} onToggle={() => setShowSettled((v) => !v)}>
-                <Paged rows={groups.settled} render={(r) => <PersonRow key={r.p.id} p={r.p} t={r.t} currency={c} compact />} />
+                <Paged rows={groups.settled} render={(r) => <PersonRow key={r.p.id} p={r.p} s={r.s} compact />} />
               </Collapsible>
             )}
 
-            {groups.archived.length > 0 && (
-              <Collapsible title={`Archived (${groups.archived.length})`} open={showArchived || searching} onToggle={() => setShowArchived((v) => !v)}>
-                <Paged rows={groups.archived} render={(r) => <PersonRow key={r.p.id} p={r.p} t={r.t} currency={c} compact />} />
-              </Collapsible>
-            )}
           </>
         )}
       </div>
@@ -174,7 +154,7 @@ function Collapsible({ title, open, onToggle, children }: { title: string; open:
   )
 }
 
-/** Shows rows in pages of 15 with a "Show more" button. */
+/** Shows rows in pages with a "Show more" button. */
 export function Paged<T>({ rows, render, page = PAGE }: { rows: T[]; render: (r: T) => ReactNode; page?: number }) {
   const [count, setCount] = useState(page)
   return (
@@ -189,38 +169,34 @@ export function Paged<T>({ rows, render, page = PAGE }: { rows: T[]; render: (r:
   )
 }
 
-function PersonRow({ p, t, currency, compact }: { p: Person; t?: PersonTotals; currency: string; compact?: boolean }) {
-  const { settings } = useApp()
-  const bal = t?.balance ?? 0
+function PersonRow({ p, s, compact }: { p: Person; s?: PersonSummary; compact?: boolean }) {
+  const open = s?.open ?? []
+  const pos = open.length > 0 && open.every((o) => o.balance > 0)
+  const neg = open.length > 0 && open.every((o) => o.balance < 0)
   return (
     <Link
       to={`/people/${p.id}`}
       className={cx(
         'flex items-center gap-3 rounded-2xl border px-3.5 active:scale-[0.99]',
         compact ? 'py-2.5' : 'py-3',
-        bal > 0
-          ? 'border-pos-line bg-pos-soft dark:border-green-900 dark:bg-green-950/40'
-          : bal < 0
-            ? 'border-neg-line bg-neg-soft dark:border-red-900 dark:bg-red-950/40'
-            : 'border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-900',
+        pos ? 'border-pos-line bg-pos-soft dark:border-green-900 dark:bg-green-950/40' : neg ? 'border-neg-line bg-neg-soft dark:border-red-900 dark:bg-red-950/40' : 'border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-900',
       )}
     >
-      <Avatar name={p.name} archived={!!p.archivedAt} />
+      <Avatar name={p.name} />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{p.name}</div>
-        <div className="truncate text-[13px] text-slate-500">
-          {t?.lastDate ? `Last: ${relativeDay(t.lastDate, settings.dateFormat)}` : 'No entries yet'}
-          {t?.count ? ` · ${t.count} entr${t.count === 1 ? 'y' : 'ies'}` : ''}
-        </div>
+        <div className="truncate text-[13px] text-slate-500">{s?.lastDate ? `Last: ${formatDate(s.lastDate)}` : p.phone || 'No entries yet'}</div>
       </div>
       <div className="text-right">
-        {bal === 0 ? (
+        {open.length === 0 ? (
           <div className="text-sm font-medium text-slate-400">Settled</div>
         ) : (
-          <>
-            <div className={cx('tabular font-semibold', bal > 0 ? 'text-pos' : 'text-neg')}>{formatMoney(Math.abs(bal), currency)}</div>
-            <div className={cx('text-[11px]', bal > 0 ? 'text-pos/80' : 'text-neg/80')}>{bal > 0 ? 'Owes me' : 'I owe'}</div>
-          </>
+          open.map(({ currency, balance }) => (
+            <div key={currency} className={cx('tabular font-semibold leading-tight', balance > 0 ? 'text-pos' : 'text-neg')}>
+              {formatMoney(Math.abs(balance), currency)}
+              <span className="ml-1 text-[11px] font-medium opacity-80">{balance > 0 ? 'owes me' : 'I owe'}</span>
+            </div>
+          ))
         )}
       </div>
       <ChevronRight size={18} className="text-slate-300" />

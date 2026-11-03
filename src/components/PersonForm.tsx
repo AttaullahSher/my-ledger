@@ -131,6 +131,9 @@ export function PersonForm({
         <Field label="Name">
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ahmed" autoCapitalize="words" onKeyDown={(e) => e.key === 'Enter' && save()} />
         </Field>
+        <Field label="Mobile number">
+          <input className={inputCls} type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+971 50 123 4567" onKeyDown={(e) => e.key === 'Enter' && save()} />
+        </Field>
         {error && <div className="text-sm text-red-600">{error}</div>}
         <Sheet open={contactHelp} onClose={() => setContactHelp(false)} title="Use your iPhone contacts">
           <div className="space-y-4 pb-3 text-[15px]">

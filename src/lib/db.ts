@@ -1,11 +1,10 @@
 import Dexie, { type Table } from 'dexie'
-import type { OutboxItem, Person, SettingsRow, Snapshot, Transaction } from './types'
+import type { OutboxItem, Person, SettingsRow, Transaction } from './types'
 
 export class LedgerDB extends Dexie {
   people!: Table<Person, string>
   transactions!: Table<Transaction, string>
   settings!: Table<SettingsRow, string>
-  snapshots!: Table<Snapshot, string>
   outbox!: Table<OutboxItem, string>
 
   constructor(name = 'my-ledger') {
@@ -27,6 +26,8 @@ export class LedgerDB extends Dexie {
       snapshots: 'id, createdAt',
       outbox: 'key, queuedAt',
     })
+    // v3: on-phone snapshots removed — the account sync keeps data safe.
+    this.version(3).stores({ snapshots: null })
   }
 }
 
@@ -57,3 +58,7 @@ export async function queue(table: 'people' | 'transactions', ids: string[]) {
   const t = nowISO()
   await db.outbox.bulkPut(ids.map((id) => ({ key: `${table}:${id}`, table, id, queuedAt: t })))
 }
+
+/** Ids of entries saved on this phone but not yet uploaded to the account. */
+export const pendingTxIds = async () =>
+  new Set((await db.outbox.toArray()).filter((i) => i.table === 'transactions').map((i) => i.id))

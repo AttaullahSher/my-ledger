@@ -1,117 +1,135 @@
 // Pure balance logic — no database access, so it is easy to test.
-import type { Person, Transaction } from './types'
+// Balances are kept per currency (AED, PKR, USD) and never mixed.
 import { formatMoney } from './money'
+import { DEFAULT_CURRENCY, type Person, type Transaction } from './types'
+
+export const curOf = (t: Pick<Transaction, 'currency'>) => t.currency || DEFAULT_CURRENCY
 
 /** Effect of one transaction on "they owe me". Given = +, received = -. */
 export function effectOf(t: Pick<Transaction, 'direction' | 'amountInFils'>): number {
   return t.direction === 'given' ? t.amountInFils : -t.amountInFils
 }
 
-export interface PersonTotals {
+export interface Totals {
   given: number
   received: number
   /** Positive = they owe me. Negative = I owe them. Zero = settled. */
   balance: number
+}
+
+/** Totals for a list of entries that are all in the same currency. */
+export function totalsOf(txs: Transaction[]): Totals {
+  let given = 0
+  let received = 0
+  for (const t of txs) {
+    if (t.direction === 'given') given += t.amountInFils
+    else received += t.amountInFils
+  }
+  return { given, received, balance: given - received }
+}
+
+export interface PersonSummary {
+  /** Totals per currency, e.g. AED → {...}, PKR → {...} */
+  byCurrency: Map<string, Totals>
+  /** Only currencies with a non-zero balance */
+  open: { currency: string; balance: number }[]
+  settled: boolean
   count: number
   lastDate?: string
 }
 
-export function personTotals(txs: Transaction[]): PersonTotals {
-  let given = 0
-  let received = 0
+export function personSummary(txs: Transaction[]): PersonSummary {
+  const groups = new Map<string, Transaction[]>()
   let lastDate: string | undefined
   for (const t of txs) {
-    if (t.direction === 'given') given += t.amountInFils
-    else received += t.amountInFils
+    const c = curOf(t)
+    groups.set(c, [...(groups.get(c) ?? []), t])
     if (!lastDate || t.date > lastDate) lastDate = t.date
   }
-  return { given, received, balance: given - received, count: txs.length, lastDate }
+  const byCurrency = new Map<string, Totals>()
+  for (const [c, list] of groups) byCurrency.set(c, totalsOf(list))
+  const open = [...byCurrency].filter(([, t]) => t.balance !== 0).map(([currency, t]) => ({ currency, balance: t.balance }))
+  return { byCurrency, open, settled: open.length === 0, count: txs.length, lastDate }
 }
 
-/** Totals per person — each person is computed only from their own transactions. */
-export function totalsByPerson(txs: Transaction[]): Map<string, PersonTotals> {
+/** Summary per person — each person is computed only from their own entries. */
+export function summariesByPerson(txs: Transaction[]): Map<string, PersonSummary> {
   const groups = new Map<string, Transaction[]>()
-  for (const t of txs) {
-    const list = groups.get(t.personId)
-    if (list) list.push(t)
-    else groups.set(t.personId, [t])
-  }
-  const out = new Map<string, PersonTotals>()
-  for (const [id, list] of groups) out.set(id, personTotals(list))
+  for (const t of txs) groups.set(t.personId, [...(groups.get(t.personId) ?? []), t])
+  const out = new Map<string, PersonSummary>()
+  for (const [id, list] of groups) out.set(id, personSummary(list))
   return out
 }
 
-export interface DashboardTotals {
+export interface CurrencyTotals {
+  currency: string
   theyOweMe: number
   iOweThem: number
-  net: number
-  openCount: number
 }
 
-export function dashboardTotals(txs: Transaction[]): DashboardTotals {
-  let theyOweMe = 0
-  let iOweThem = 0
-  let openCount = 0
-  for (const t of totalsByPerson(txs).values()) {
-    if (t.balance > 0) theyOweMe += t.balance
-    else if (t.balance < 0) iOweThem += -t.balance
-    if (t.balance !== 0) openCount++
+/** Main-screen totals, one row per currency in use. */
+export function dashboardTotals(txs: Transaction[]): { rows: CurrencyTotals[]; openPeople: number } {
+  const map = new Map<string, CurrencyTotals>()
+  let openPeople = 0
+  for (const s of summariesByPerson(txs).values()) {
+    if (!s.settled) openPeople++
+    for (const { currency, balance } of s.open) {
+      const row = map.get(currency) ?? { currency, theyOweMe: 0, iOweThem: 0 }
+      if (balance > 0) row.theyOweMe += balance
+      else row.iOweThem += -balance
+      map.set(currency, row)
+    }
   }
-  return { theyOweMe, iOweThem, net: theyOweMe - iOweThem, openCount }
+  return { rows: [...map.values()], openPeople }
 }
 
-/**
- * Splits a person's history into "settled & closed" (everything up to the last moment the
- * balance was zero) and "open" (entries after that). Both returned newest first.
- */
-export function splitSettled(txs: Transaction[]) {
-  const rows = withRunningBalance(txs)
-  let cut = -1
-  rows.forEach((r, i) => {
-    if (r.balance === 0) cut = i
-  })
-  const closed = rows.slice(0, cut + 1).reverse()
-  const open = rows.slice(cut + 1).reverse()
-  return { open, closed }
-}
-
-/** Sort oldest → newest (date, then creation time) for statements and running balances. */
+/** Sort oldest → newest (date, then creation time). */
 export function sortChronological<T extends { date: string; createdAt: string }>(list: T[]): T[] {
   return [...list].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
 }
 
-export function sortNewestFirst<T extends { date: string; createdAt: string }>(list: T[]): T[] {
-  return sortChronological(list).reverse()
+export interface Row {
+  tx: Transaction
+  /** Running balance in this entry's currency, after this entry. */
+  balance: number
 }
 
-/** Rows with running balance, oldest first. openingBalance = balance before the first row. */
-export function withRunningBalance(txs: Transaction[], openingBalance = 0) {
-  let bal = openingBalance
+/** Rows with running balance per currency, oldest first. */
+export function withRunningBalance(txs: Transaction[], opening: Map<string, number> = new Map()): Row[] {
+  const bal = new Map(opening)
   return sortChronological(txs).map((t) => {
-    bal += effectOf(t)
-    return { tx: t, balance: bal }
+    const c = curOf(t)
+    const b = (bal.get(c) ?? 0) + effectOf(t)
+    bal.set(c, b)
+    return { tx: t, balance: b }
   })
 }
 
-/** The settlement that brings the balance to zero, or null when already settled. */
+/**
+ * Splits history into "settled & closed" (everything up to the last moment ALL currencies were zero)
+ * and "open" (after that). Both newest first.
+ */
+export function splitSettled(txs: Transaction[]) {
+  const rows = withRunningBalance(txs)
+  const bal = new Map<string, number>()
+  let cut = -1
+  rows.forEach((r, i) => {
+    bal.set(curOf(r.tx), r.balance)
+    if ([...bal.values()].every((v) => v === 0)) cut = i
+  })
+  return { open: rows.slice(cut + 1).reverse(), closed: rows.slice(0, cut + 1).reverse() }
+}
+
+/** The settlement that brings a balance to zero, or null when already settled. */
 export function settlementFor(balance: number): { direction: 'given' | 'received'; amountInFils: number } | null {
   if (balance === 0) return null
-  // They owe me → they pay me (received). I owe them → I pay them (given).
-  return balance > 0
-    ? { direction: 'received', amountInFils: balance }
-    : { direction: 'given', amountInFils: -balance }
+  return balance > 0 ? { direction: 'received', amountInFils: balance } : { direction: 'given', amountInFils: -balance }
 }
 
 export function balanceSentence(name: string, balance: number, currency: string): string {
   if (balance > 0) return `${name} owes me ${formatMoney(balance, currency)}.`
   if (balance < 0) return `I owe ${name} ${formatMoney(-balance, currency)}.`
   return `${name} and I are settled.`
-}
-
-export function balanceLabel(balance: number): 'They owe me' | 'I owe them' | 'All settled' {
-  if (balance > 0) return 'They owe me'
-  if (balance < 0) return 'I owe them'
-  return 'All settled'
 }
 
 export function typeLabel(t: Pick<Transaction, 'type' | 'direction'>): string {

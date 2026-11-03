@@ -10,7 +10,7 @@ import { Button, cx, inputCls } from './ui'
 
 export function SyncCard({ onDone }: { onDone?: () => void }) {
   const s = useSync()
-  const { toast, settings } = useApp()
+  const { toast } = useApp()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
@@ -40,7 +40,7 @@ export function SyncCard({ onDone }: { onDone?: () => void }) {
             </div>
             <div className="truncate text-slate-500">
               {s.email}
-              {s.lastSyncAt ? ` · ${formatDateTime(s.lastSyncAt, settings.dateFormat)}` : ''}
+              {s.lastSyncAt ? ` · ${formatDateTime(s.lastSyncAt)}` : ''}
             </div>
           </div>
         </div>
