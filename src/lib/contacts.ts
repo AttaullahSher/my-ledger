@@ -13,9 +13,9 @@ export function canPickContacts(): boolean {
   return typeof navigator !== 'undefined' && 'contacts' in navigator && 'ContactsManager' in window
 }
 
-export async function pickContacts(): Promise<PickedContact[]> {
+export async function pickContacts(multiple = false): Promise<PickedContact[]> {
   const mgr = (navigator as unknown as { contacts: ContactsManager }).contacts
-  const res = await mgr.select(['name', 'tel'], { multiple: true })
+  const res = await mgr.select(['name', 'tel'], { multiple })
   return res
     .map((c) => ({ name: (c.name?.[0] ?? '').trim(), phone: c.tel?.[0]?.trim() }))
     .filter((c) => c.name || c.phone)

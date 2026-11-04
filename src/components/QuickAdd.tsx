@@ -9,6 +9,7 @@ import { formatPhone, phoneMatches } from '../lib/phone'
 import * as repo from '../lib/repo'
 import { CURRENCIES, REASON_SUGGESTIONS, type Person } from '../lib/types'
 import { useApp, type QuickAddKind } from './AppContext'
+import { ContactsButton } from './ContactsButton'
 import { Avatar, Button, Chip, Field, Segmented, Sheet, cx, inputCls } from './ui'
 
 export function QuickAdd() {
@@ -251,11 +252,19 @@ function PersonPicker({
           <input autoFocus className={inputCls} placeholder="Name" autoCapitalize="words" value={newName} onChange={(e) => setNewName(e.target.value)} />
           <input type="tel" inputMode="tel" className={inputCls} placeholder="Mobile (any format, e.g. 050 123 4567)" value={mobile} onChange={(e) => setMobile(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
           {err && <div className="text-sm text-red-600">{err}</div>}
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <Button disabled={busy} onClick={create}>
-              <UserPlus size={17} /> Add person
+          <div className="grid grid-cols-3 gap-2">
+            <Button disabled={busy} onClick={create} className="px-2">
+              <UserPlus size={17} /> Add
             </Button>
-            <Button variant="secondary" onClick={() => setAdding(false)}>
+            <ContactsButton
+              className="px-2"
+              onPicked={([c]) => {
+                setNewName(c.name)
+                setMobile(c.phone ?? '')
+                setErr(c.phone ? '' : 'This contact has no mobile number — please type it.')
+              }}
+            />
+            <Button variant="secondary" className="px-2" onClick={() => setAdding(false)}>
               Cancel
             </Button>
           </div>
