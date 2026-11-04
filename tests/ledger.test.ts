@@ -40,7 +40,7 @@ describe('basics', () => {
     await expect(repo.addPerson({ name: 'No phone' })).rejects.toThrow('mobile')
     await expect(repo.addPerson({ name: 'Bad', phone: '123' })).rejects.toThrow('mobile')
     await expect(repo.addPerson({ name: '', phone: '0501234567' })).rejects.toThrow('name')
-    expect((await repo.addPerson({ name: 'Ok', phone: '+971 50 123 4567' })).phone).toBe('+971501234567')
+    expect((await repo.addPerson({ name: 'Ok', phone: '050 123 4567' })).phone).toBe('+971501234567')
   })
 })
 

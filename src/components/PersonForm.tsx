@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Contact, Trash2 } from 'lucide-react'
 import { canPickContacts, parseVCards, pickContacts, type PickedContact } from '../lib/contacts'
+import { formatPhone } from '../lib/phone'
 import * as repo from '../lib/repo'
 import type { Person } from '../lib/types'
 import { useApp } from './AppContext'
@@ -33,7 +34,7 @@ export function PersonForm({
   useEffect(() => {
     if (open) {
       setName(person?.name ?? '')
-      setPhone(person?.phone ?? '')
+      setPhone(formatPhone(person?.phone))
       setNotes(person?.notes ?? '')
       setError('')
       setSaving(false)
@@ -131,7 +132,7 @@ export function PersonForm({
         <Field label="Name">
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ahmed" autoCapitalize="words" onKeyDown={(e) => e.key === 'Enter' && save()} />
         </Field>
-        <Field label="Mobile number">
+        <Field label="Mobile number" hint="Any format: 050 123 4567, 0300 1234567, +1 212 555 1234…">
           <input className={inputCls} type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+971 50 123 4567" onKeyDown={(e) => e.key === 'Enter' && save()} />
         </Field>
         {error && <div className="text-sm text-red-600">{error}</div>}

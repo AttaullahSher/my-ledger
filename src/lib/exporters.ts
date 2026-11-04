@@ -3,6 +3,7 @@ import type { AllData } from './backup'
 import { formatDate, todayISO } from './dates'
 import { balanceSentence, curOf, personSummary, sortChronological, summariesByPerson, totalsOf, typeLabel, withRunningBalance } from './ledger'
 import { filsToNumber, formatMoney } from './money'
+import { formatPhone } from './phone'
 import type { Person, Transaction } from './types'
 
 export interface ExportOpts {
@@ -197,9 +198,9 @@ export async function allDataXLSX(data: AllData, o: ExportOpts): Promise<File> {
   const sums = summariesByPerson(data.transactions)
   for (const p of [...data.people].sort((a, b) => a.name.localeCompare(b.name))) {
     const s = sums.get(p.id) ?? personSummary([])
-    if (!s.byCurrency.size) bal.addRow([p.name, p.phone ?? '', '', 0, 0, 0, 'No entries'])
+    if (!s.byCurrency.size) bal.addRow([p.name, formatPhone(p.phone), '', 0, 0, 0, 'No entries'])
     for (const [c, t] of s.byCurrency)
-      bal.addRow([p.name, p.phone ?? '', c, filsToNumber(t.given), filsToNumber(t.received), filsToNumber(t.balance), t.balance > 0 ? 'They owe me' : t.balance < 0 ? 'I owe them' : 'Settled'])
+      bal.addRow([p.name, formatPhone(p.phone), c, filsToNumber(t.given), filsToNumber(t.received), filsToNumber(t.balance), t.balance > 0 ? 'They owe me' : t.balance < 0 ? 'I owe them' : 'Settled'])
   }
   style(bal, [24, 18, 10, 14, 14, 14, 14], [4, 5, 6])
 

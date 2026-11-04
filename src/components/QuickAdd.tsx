@@ -5,6 +5,7 @@ import { livePeople, liveTransactions, newId } from '../lib/db'
 import { formatDate, todayISO } from '../lib/dates'
 import { curOf, summariesByPerson } from '../lib/ledger'
 import { filsToPlain, formatMoney, parseAmountToFils } from '../lib/money'
+import { formatPhone, phoneMatches } from '../lib/phone'
 import * as repo from '../lib/repo'
 import { CURRENCIES, REASON_SUGGESTIONS, type Person } from '../lib/types'
 import { useApp, type QuickAddKind } from './AppContext'
@@ -184,9 +185,8 @@ function PersonPicker({
 
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase()
-    const digits = s.replace(/\D/g, '')
     const active = people
-    const list = s ? active.filter((p) => p.name.toLowerCase().includes(s) || (digits.length > 2 && p.phone?.replace(/\D/g, '').includes(digits))) : active
+    const list = s ? active.filter((p) => p.name.toLowerCase().includes(s) || phoneMatches(p.phone, s)) : active
     const last = (p: Person) => summaries?.get(p.id)?.lastDate ?? p.createdAt
     return list.sort((a, b) => last(b).localeCompare(last(a))).slice(0, s ? 20 : 6)
   }, [q, people, summaries])
@@ -249,7 +249,7 @@ function PersonPicker({
       {adding ? (
         <div className="space-y-2 rounded-2xl bg-blue-50/60 p-3 ring-1 ring-blue-100 dark:bg-blue-950/40 dark:ring-blue-900">
           <input autoFocus className={inputCls} placeholder="Name" autoCapitalize="words" value={newName} onChange={(e) => setNewName(e.target.value)} />
-          <input type="tel" inputMode="tel" className={inputCls} placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
+          <input type="tel" inputMode="tel" className={inputCls} placeholder="Mobile (any format, e.g. 050 123 4567)" value={mobile} onChange={(e) => setMobile(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
           {err && <div className="text-sm text-red-600">{err}</div>}
           <div className="grid grid-cols-[1fr_auto] gap-2">
             <Button disabled={busy} onClick={create}>
@@ -295,7 +295,7 @@ function PersonPicker({
             <Avatar name={p.name} />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{p.name}</span>
-              {p.phone && <span className="block truncate text-xs text-slate-500">{p.phone}</span>}
+              {p.phone && <span className="block truncate text-xs text-slate-500">{formatPhone(p.phone)}</span>}
             </span>
           </button>
         ))}

@@ -16,6 +16,7 @@ import { personStatementPDF, statementText, type DateRange } from '../lib/export
 import { curOf, personSummary, splitSettled, typeLabel, type Row } from '../lib/ledger'
 import { formatMoney } from '../lib/money'
 import * as repo from '../lib/repo'
+import { formatPhone } from '../lib/phone'
 import { whatsappLink } from '../lib/share'
 import type { Transaction } from '../lib/types'
 import { Paged } from './Home'
@@ -108,7 +109,7 @@ export function PersonDetailPage() {
           </div>
           <div className="ml-2 min-w-0 flex-1">
             <h1 className="truncate text-2xl font-bold tracking-tight">{person.name}</h1>
-            <div className="truncate text-sm text-slate-500">{person.phone || 'No mobile saved'}</div>
+            <div className="truncate text-sm text-slate-500">{formatPhone(person.phone) || 'No mobile saved'}</div>
           </div>
         </div>
 

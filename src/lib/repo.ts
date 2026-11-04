@@ -2,6 +2,7 @@
 import Dexie from 'dexie'
 import { db, liveTxsOf, newId, nowISO, queue } from './db'
 import { isValidISODate } from './dates'
+import { normalizePhone } from './phone'
 import { curOf, personSummary, settlementFor } from './ledger'
 import { CURRENCIES, DEFAULT_CURRENCY, DEFAULT_SETTINGS, PROFILE_KEYS, type Direction, type Person, type Settings, type Transaction } from './types'
 
@@ -13,11 +14,8 @@ function assertAmount(fils: number) {
 function assertDate(date: string) {
   if (!isValidISODate(date)) throw new ValidationError('Please choose a valid date.')
 }
-/** Keeps + and digits only; a mobile number needs at least 7 digits. */
-export function cleanPhone(p?: string | null): string | undefined {
-  const v = (p ?? '').trim().replace(/[^\d+]/g, '')
-  return v.replace(/\D/g, '').length >= 7 ? v : undefined
-}
+/** Accepts UAE, Pakistan, US and international formats; see phone.ts. */
+export const cleanPhone = normalizePhone
 function assertCurrency(c?: string) {
   if (c && !(CURRENCIES as readonly string[]).includes(c)) throw new ValidationError('Currency must be AED, PKR or USD.')
 }

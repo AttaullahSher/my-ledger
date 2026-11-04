@@ -11,6 +11,7 @@ import { livePeople, liveTransactions } from '../lib/db'
 import { formatDate } from '../lib/dates'
 import { dashboardTotals, summariesByPerson, type PersonSummary } from '../lib/ledger'
 import { formatMoney } from '../lib/money'
+import { formatPhone, phoneMatches } from '../lib/phone'
 import type { Person } from '../lib/types'
 
 const PAGE = 15
@@ -29,9 +30,8 @@ export function HomePage() {
 
   const groups = useMemo(() => {
     const s = q.trim().toLowerCase()
-    const digits = s.replace(/\D/g, '')
     const rows = (data?.people ?? [])
-      .filter((p) => !s || p.name.toLowerCase().includes(s) || (digits.length > 2 && p.phone?.replace(/\D/g, '').includes(digits)))
+      .filter((p) => !s || p.name.toLowerCase().includes(s) || phoneMatches(p.phone, s))
       .map((p) => ({ p, s: data!.sums.get(p.id) }))
     const recent = (r: { p: Person; s?: PersonSummary }) => r.s?.lastDate ?? r.p.createdAt.slice(0, 10)
     const byRecent = (a: typeof rows[number], b: typeof rows[number]) => recent(b).localeCompare(recent(a))
@@ -182,7 +182,7 @@ function PersonRow({ p, s, compact }: { p: Person; s?: PersonSummary; compact?: 
       <Avatar name={p.name} />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{p.name}</div>
-        <div className="truncate text-[13px] text-slate-500">{s?.lastDate ? `Last: ${formatDate(s.lastDate)}` : p.phone || 'No entries yet'}</div>
+        <div className="truncate text-[13px] text-slate-500">{s?.lastDate ? `Last: ${formatDate(s.lastDate)}` : formatPhone(p.phone) || 'No entries yet'}</div>
       </div>
       <div className="text-right">
         {open.length === 0 ? (
