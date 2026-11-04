@@ -59,16 +59,19 @@ export function PersonForm({
     }
   }
 
-  async function useContacts(list: PickedContact[]) {
-    if (list.length === 1 || person) {
-      setName(list[0].name)
-      setPhone(list[0].phone ?? '')
-      setError(list[0].phone ? '' : 'This contact has no mobile number — please type it.')
-      return
+  async function useContacts([c]: PickedContact[]) {
+    setName(c.name)
+    setPhone(c.phone ?? '')
+    if (!c.phone) return setError('This contact has no mobile number — please type it.')
+    if (person) return setError('') // editing: just fill in, user presses Save
+    try {
+      const { person: p, existed } = await repo.findOrAddPerson({ name: c.name, phone: c.phone })
+      toast(existed ? `${p.name} is already in your list` : `${p.name} added`)
+      onClose()
+      onSaved?.(p.id)
+    } catch (e) {
+      setError((e as Error).message)
     }
-    const added = await repo.addPeople(list)
-    toast(`${added} people added from contacts`)
-    onClose()
   }
 
   async function del() {
@@ -102,7 +105,7 @@ export function PersonForm({
       }
     >
       <div className="space-y-4">
-        <ContactsButton className="w-full" label={person ? 'Fill from contacts' : 'Pick from contacts'} multiple={!person} onPicked={useContacts} />
+        <ContactsButton className="w-full" label={person ? 'Fill from contacts' : 'Pick from contacts'} onPicked={useContacts} />
         <Field label="Name">
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ahmed" autoCapitalize="words" onKeyDown={(e) => e.key === 'Enter' && save()} />
         </Field>

@@ -175,3 +175,13 @@ describe('contacts', () => {
     ])
   })
 })
+
+describe('people from contacts', () => {
+  it('re-uses a person with the same mobile instead of duplicating', async () => {
+    const a = await repo.findOrAddPerson({ name: 'Ahmed', phone: '050 123 4567' })
+    const b = await repo.findOrAddPerson({ name: 'Ahmed Khan', phone: '+971501234567' })
+    expect(a.existed).toBe(false)
+    expect(b.existed).toBe(true)
+    expect(b.person.id).toBe(a.person.id)
+  })
+})

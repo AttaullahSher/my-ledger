@@ -6,7 +6,7 @@ import { useApp } from '../components/AppContext'
 import { PersonForm } from '../components/PersonForm'
 import { SettingsButton } from '../components/SyncBadge'
 import { Welcome } from '../components/Welcome'
-import { Avatar, Empty, IconButton, cx, inputCls } from '../components/ui'
+import { Avatar, Empty, cx, inputCls } from '../components/ui'
 import { livePeople, liveTransactions } from '../lib/db'
 import { formatDate } from '../lib/dates'
 import { dashboardTotals, summariesByPerson, type PersonSummary } from '../lib/ledger'
@@ -54,9 +54,14 @@ export function HomePage() {
             {settings.ownerName && <div className="-mt-0.5 truncate text-sm text-slate-500">{settings.ownerName}</div>}
           </div>
           <div className="flex shrink-0 items-center">
-            <IconButton label="Add person" onClick={() => setAdding(true)}>
-              <UserPlus size={21} />
-            </IconButton>
+            <button
+              type="button"
+              aria-label="Add person"
+              onClick={() => setAdding(true)}
+              className="mr-1 flex h-10 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[15px] font-semibold text-white shadow-sm active:scale-95"
+            >
+              <UserPlus size={18} /> New
+            </button>
             <SettingsButton />
           </div>
         </div>

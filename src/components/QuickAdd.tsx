@@ -35,6 +35,7 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [draftId, setDraftId] = useState(newId) // stable id → double taps can't create duplicates
+  const draftPerson = useRef<{ name: string; mobile: string } | null>(null) // typed in "New person" but not added yet
   const amountRef = useRef<HTMLInputElement>(null)
 
   const people = useLiveQuery(livePeople, []) ?? []
@@ -57,11 +58,21 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
 
   async function save(addAnother: boolean) {
     setError('')
-    if (!personId) return setError('Choose a person.')
+    let pid = personId
     if (!fils) return setError('Enter an amount greater than zero.')
     setSaving(true)
     try {
-      const input = { personId: personId!, direction: kind, amountInFils: fils, reason, notes: editTx?.notes, date, currency }
+      // Name + mobile typed in "New person" but Add not pressed → add them now.
+      if (!pid && draftPerson.current?.name.trim()) {
+        const { person: p } = await repo.findOrAddPerson({ name: draftPerson.current.name, phone: draftPerson.current.mobile })
+        pid = p.id
+        setPersonId(p.id)
+      }
+      if (!pid) {
+        setSaving(false)
+        return setError('Choose a person.')
+      }
+      const input = { personId: pid, direction: kind, amountInFils: fils, reason, notes: editTx?.notes, date, currency }
       if (editTx) await repo.updateTransaction(editTx.id, input)
       else await repo.addTransaction({ ...input, id: draftId })
       toast(`${isEdit ? 'Updated' : 'Saved'}: ${kind === 'given' ? 'Given' : 'Received'} ${formatMoney(fils, currency)}`)
@@ -114,7 +125,9 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
           />
         )}
 
-        <PersonPicker people={people} person={person} summaries={summaries} onPick={pick} onClear={() => setPersonId(undefined)} />
+        <PersonPicker people={people} person={person} summaries={summaries} onPick={pick} onClear={() => setPersonId(undefined)} onDraft={(d) => {
+          draftPerson.current = d
+        }} />
 
         <div>
           <span className="mb-1.5 block text-[13px] font-medium text-slate-500 dark:text-slate-400">Amount</span>
@@ -170,12 +183,14 @@ function PersonPicker({
   summaries,
   onPick,
   onClear,
+  onDraft,
 }: {
   people: Person[]
   person?: Person
   summaries?: ReturnType<typeof summariesByPerson>
   onPick: (p: Person) => void
   onClear: () => void
+  onDraft: (d: { name: string; mobile: string } | null) => void
 }) {
   const [q, setQ] = useState('')
   const [newName, setNewName] = useState('')
@@ -183,6 +198,30 @@ function PersonPicker({
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+
+  useEffect(() => {
+    onDraft(adding ? { name: newName, mobile } : null)
+  }, [adding, newName, mobile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Picking a contact selects that person at once (re-uses them if the number already exists). */
+  async function fromContact(name: string, phone?: string) {
+    setNewName(name)
+    setMobile(phone ?? '')
+    if (!phone) return setErr('This contact has no mobile number — please type it.')
+    setBusy(true)
+    setErr('')
+    try {
+      const { person: p } = await repo.findOrAddPerson({ name, phone })
+      setAdding(false)
+      setNewName('')
+      setMobile('')
+      onPick(p)
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -196,7 +235,7 @@ function PersonPicker({
     setErr('')
     setBusy(true)
     try {
-      const p = await repo.addPerson({ name: newName, phone: mobile })
+      const { person: p } = await repo.findOrAddPerson({ name: newName, phone: mobile })
       setQ('')
       setNewName('')
       setMobile('')
@@ -258,11 +297,7 @@ function PersonPicker({
             </Button>
             <ContactsButton
               className="px-2"
-              onPicked={([c]) => {
-                setNewName(c.name)
-                setMobile(c.phone ?? '')
-                setErr(c.phone ? '' : 'This contact has no mobile number — please type it.')
-              }}
+              onPicked={([c]) => fromContact(c.name, c.phone)}
             />
             <Button variant="secondary" className="px-2" onClick={() => setAdding(false)}>
               Cancel

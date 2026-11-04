@@ -60,6 +60,17 @@ export async function addPerson(input: { name: string; phone?: string; notes?: s
   return person
 }
 
+/** Returns the existing person with this mobile number, or adds a new one. Avoids duplicates. */
+export async function findOrAddPerson(input: { name: string; phone?: string }): Promise<{ person: Person; existed: boolean }> {
+  const phone = cleanPhone(input.phone)
+  if (phone) {
+    const tail = phone.replace(/\D/g, '').slice(-9)
+    const existing = (await db.people.toArray()).find((p) => !p.deletedAt && p.phone && p.phone.replace(/\D/g, '').slice(-9) === tail)
+    if (existing) return { person: existing, existed: true }
+  }
+  return { person: await addPerson(input), existed: false }
+}
+
 /** Adds several people at once (contacts import). Skips names that already exist or have no mobile. */
 export async function addPeople(list: { name: string; phone?: string }[]): Promise<number> {
   const existing = new Set((await db.people.toArray()).filter((p) => !p.deletedAt).map((p) => p.name.toLowerCase()))
